@@ -6,5 +6,9 @@
     {
         "ParameterKey":"EBSVolumeSize",
         "ParameterValue": "10"
+    },
+    {
+        "ParameterKey":"KeyPairName",
+        "ParameterValue": "vockey"
     }
 ]
