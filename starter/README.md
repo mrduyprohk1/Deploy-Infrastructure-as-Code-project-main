@@ -3,7 +3,7 @@
 
 ## Public Web App
 
-http://projec-webap-ppcvpgsigizr-923339611.us-east-1.elb.amazonaws.com/
+http://Projec-WebAp-BJpK5DP9fRPd-46570140.us-east-1.elb.amazonaws.com (new)
 
 ## Spin up instructions
 
