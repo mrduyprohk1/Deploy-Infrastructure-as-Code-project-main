@@ -1,8 +1,7 @@
 Description: CD12352 - Infrastructure as Code Project - Udagram
 
-
-
 Parameters:
+
   EnvironmentName:
     Description: An environment name that will be prefixed to resource names
     Type: String
@@ -19,7 +18,11 @@ Parameters:
   MaxEC2Servers:
     Description: Please set the maximum number of server/ec2 instances
     Type: Number
-    Default: 10
+    Default: 10 
+  KeyPairName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
 
 Resources:
 
@@ -77,7 +80,12 @@ Resources:
       - IpProtocol: tcp
         FromPort: 80
         ToPort: 80
-        CidrIp: 0.0.0.0/0
+        SourceSecurityGroupId: 
+          Ref: LoadBalanceSecurityGroup  # Only allow HTTP from the LoadBalancer
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0  # Allow SSH for maintenance (if needed, otherwise restrict further)
       SecurityGroupEgress:
       - IpProtocol: tcp
         FromPort: 0
@@ -85,30 +93,33 @@ Resources:
         CidrIp: 0.0.0.0/0
 
 
-  WebAppLaunchConfig:
-    Type: AWS::AutoScaling::LaunchConfiguration
+  WebAppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      UserData: 
-        Fn::Base64: !Sub |
-          #!/bin/bash
-          apt-get update -y
-          apt-get install unzip awscli -y
-          apt-get install apache2 -y
-          systemctl start apache2.service
-          cd /var/www/html
-          sudo rm index.html
-          sudo aws s3 cp s3://udacity-demo-1/udacity.zip .
-          sudo unzip -o udacity.zip
-          systemctl start apache2.service
-      ImageId: ami-08fdec01f5df9998f
-      IamInstanceProfile: !Ref EC2InstanceProfile
-      SecurityGroups:
-      - Ref: WebServerSecGroup
-      InstanceType: t3.medium
-      BlockDeviceMappings:
-      - DeviceName: "/dev/sdk"
-        Ebs:
-          VolumeSize: !Ref EBSVolumeSize
+      LaunchTemplateData:
+        KeyName: !Ref KeyPairName  # Add the KeyPairName here
+        UserData: 
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            apt-get update -y
+            apt-get install unzip awscli -y
+            apt-get install apache2 -y
+            systemctl start apache2.service
+            cd /var/www/html
+            sudo rm index.html
+            sudo aws s3 cp s3://udacity-demo-1/udacity.zip .
+            sudo unzip -o udacity.zip
+            systemctl start apache2.service
+        ImageId: ami-08fdec01f5df9998f
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfile
+        SecurityGroupIds:
+          - !Ref WebServerSecGroup
+        InstanceType: t3.medium
+        BlockDeviceMappings:
+          - DeviceName: "/dev/sdk"
+            Ebs:
+              VolumeSize: !Ref EBSVolumeSize
 
   WebAppGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -117,8 +128,9 @@ Resources:
       MaxSize: !Ref MaxEC2Servers
       VPCZoneIdentifier:
         - Fn::ImportValue: !Sub "${EnvironmentName}-PRIVATE-SUBNETS"
-      LaunchConfigurationName:
-        Ref: WebAppLaunchConfig
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebAppLaunchTemplate
+        Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
       HealthCheckGracePeriod: 60
       HealthCheckType: ELB
       TargetGroupARNs:
